@@ -2,12 +2,12 @@ name: CICD
 pr:
   branches:
     include:
-    - master
+    - main
     - adf_publish
 trigger:
   branches:
     include:
-    - master
+    - main
   paths:
     include:
     - scripts/
@@ -53,18 +53,26 @@ stages:
                 addToPath: true
                 architecture: 'x64'
               displayName: 'Use Python3'
-            # Need to install DevOps for Azure Databricks extension
-            - task: configuredatabricks@0
-              inputs:
-                url: '$(DATABRICKS_URL)'
-                token: '$(databricks-token)'
-              displayName: 'Configure Databricks CLI'    
+          
+            # Install Databricks CLI
+            - script: |
+                curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+                echo "databricks version" $(databricks --version)
+              displayName: 'Install Databricks CLI'
+            
+            - script: |
+                mkdir -p ~/.databricks
+                echo "[DEFAULT]" > ~/.databrickscfg
+                echo "host = $DATABRICKS_URL" >> ~/.databrickscfg
+                echo "token = $(databricks-token)" >> ~/.databrickscfg
+                databricks auth profiles
+              displayName: "Configure Databricks CLI"
+            
+            - script: |
+                echo "Uploading notebooks from $(Pipeline.Workspace)/notebooks to /Shared..."
+                databricks workspace import-dir "$(Pipeline.Workspace)/notebooks" /Shared
+              displayName: "Upload Notebooks to /Shared in the Databricks cluster"
 
-            - task: deploynotebooks@0
-              inputs:
-                notebooksFolderPath: '$(Pipeline.Workspace)/notebooks'
-                workspaceFolder: '/Shared'
-              displayName: 'Deploy (copy) data processing notebook to the Databricks cluster'
   - deployment: "Deploy_to_ADF"
     displayName: 'Deploy to ADF'
     timeoutInMinutes: 0
